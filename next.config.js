@@ -44,7 +44,7 @@ const nextConfig = {
 
     // Handle specific CSS imports from react-pdf to prevent build errors
     config.module.rules.unshift({
-      test: /\.(TextLayer|AnnotationLayer)\.css$/,
+      test: /\/(TextLayer|AnnotationLayer)\.css$/,
       include: /node_modules[/\\]react-pdf/,
       use: 'raw-loader',
     });
