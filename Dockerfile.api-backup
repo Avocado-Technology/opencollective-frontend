@@ -8,13 +8,6 @@ WORKDIR /usr/src/frontend
 # Skip Cypress Install
 ENV CYPRESS_INSTALL_BINARY=0
 
-# Install dependencies only when needed
-FROM base AS deps
-# Copy package files
-COPY package*.json ./
-# Install dependencies with --legacy-peer-deps to resolve React 19 conflicts
-RUN npm install --legacy-peer-deps --omit=dev --ignore-scripts && npm cache clean --force
-
 # Build stage - install all deps including dev dependencies
 FROM base AS build
 # Copy all source files first so config files are available
