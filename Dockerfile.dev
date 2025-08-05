@@ -1,0 +1,29 @@
+FROM node:20.19
+
+WORKDIR /usr/src/frontend
+
+# Skip Cypress Install
+ENV CYPRESS_INSTALL_BINARY 0
+
+# Set development environment
+ARG NODE_ENV=development
+ENV NODE_ENV $NODE_ENV
+
+ARG PORT=3000
+ENV PORT $PORT
+
+# Install dependencies first for better caching
+COPY package*.json ./
+RUN npm install --unsafe-perm
+
+# Copy source code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p test/output/emails-data
+
+# Expose the port
+EXPOSE $PORT
+
+# Start the development server
+CMD ["npm", "run", "dev"]

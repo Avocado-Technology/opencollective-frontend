@@ -1,0 +1,101 @@
+networks:
+  opencollective-dev:
+    external: true
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+      args:
+        NODE_ENV: development
+    container_name: opencollective-frontend-local
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - opencollective-dev
+    env_file:
+      - .env.local
+    environment:
+      # Override specific Docker-related settings
+      - API_URL=http://host.docker.internal:3060
+      - INTERNAL_API_URL=http://host.docker.internal:3060
+      - REST_URL=http://host.docker.internal:3060
+    volumes:
+      - .:/usr/src/frontend
+      - /usr/src/frontend/node_modules
+      - /usr/src/frontend/.next
+    command: npm run dev
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  postgres:
+    image: postgres:15
+    container_name: opencollective-postgres
+    restart: unless-stopped
+    networks:
+      - opencollective-dev
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: opencollective_dvl
+      POSTGRES_USER: opencollective
+      POSTGRES_PASSWORD: password
+      POSTGRES_MULTIPLE_DATABASES: opencollective_dvl,opencollective_test,opencollective_e2e
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U opencollective -d opencollective_dvl"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: opencollective-redis
+    restart: unless-stopped
+    networks:
+      - opencollective-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --appendfsync everysec --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mailpit:
+    image: axllent/mailpit
+    container_name: opencollective-mailpit
+    restart: unless-stopped
+    networks:
+      - opencollective-dev
+    volumes:
+      - ./test/output/emails-data:/data
+    ports:
+      - "1080:8025"
+      - "1025:1025"
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_DATABASE: /data/mailpit.db
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8025/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:

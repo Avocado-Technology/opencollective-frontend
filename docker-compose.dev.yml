@@ -1,0 +1,31 @@
+networks:
+  opencollective-dev:
+    driver: bridge
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: opencollective-frontend-dev
+    restart: unless-stopped
+    networks:
+      - opencollective-dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - API_URL=${API_URL:-http://localhost:3060}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-http://localhost:3060}
+      - IMAGES_URL=${IMAGES_URL:-https://images.opencollective.com}
+      - WEBSITE_URL=${WEBSITE_URL:-http://localhost:3000}
+      - PDF_SERVICE_V2_URL=${PDF_SERVICE_V2_URL:-https://pdf.opencollective.com}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-https://ml.opencollective.com}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules

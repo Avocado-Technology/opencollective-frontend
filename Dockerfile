@@ -1,44 +1,46 @@
-FROM node:20.19
+# Multi-stage build for optimized performance and size
+FROM node:20-alpine AS base
 
+# Install curl for health checks and dependencies
+RUN apk add --no-cache curl libc6-compat bash
 WORKDIR /usr/src/frontend
 
 # Skip Cypress Install
-ENV CYPRESS_INSTALL_BINARY 0
+ENV CYPRESS_INSTALL_BINARY=0
 
-# Install dependencies first
-COPY package*.json ./
-RUN npm install --unsafe-perm
-
+# Build stage - install all deps including dev dependencies
+FROM base AS build
+# Copy all source files first so config files are available
 COPY . .
-
-ARG PORT=3000
-ENV PORT $PORT
-
-ARG NODE_ENV=production
-ENV NODE_ENV $NODE_ENV
-
-ARG API_URL=https://api-staging.opencollective.com
-ENV API_URL $API_URL
-
-ARG INTERNAL_API_URL=https://api-staging-direct.opencollective.com
-ENV INTERNAL_API_URL $INTERNAL_API_URL
-
-ARG IMAGES_URL=https://images-staging.opencollective.com
-ENV IMAGES_URL $IMAGES_URL
-
-ARG PDF_SERVICE_V2_URL=https://pdf-staging.opencollective.com
-ENV PDF_SERVICE_V2_URL $PDF_SERVICE_V2_URL
-
-ARG ML_SERVICE_URL=https://ml.opencollective.com
-ENV ML_SERVICE_URL $ML_SERVICE_URL
-
-ARG API_KEY=09u624Pc9F47zoGLlkg1TBSbOl2ydSAq
-ENV API_KEY $API_KEY
-
+ENV NEXT_TELEMETRY_DISABLED=1
+# Install all dependencies including dev deps with --legacy-peer-deps  
+RUN npm install --legacy-peer-deps
 RUN npm run build
 
-RUN npm prune --production
+# Production stage
+FROM base AS runner
+WORKDIR /usr/src/frontend
 
-EXPOSE $PORT
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-CMD [ "npm", "run", "start" ]
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy built application
+COPY --from=build /usr/src/frontend/public ./public
+COPY --from=build --chown=nextjs:nodejs /usr/src/frontend/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /usr/src/frontend/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
+
+CMD ["node", "server.js"]

@@ -129,7 +129,7 @@ jobs:
             ${{ runner.os }}-${{ secrets.CACHE_VERSION }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
             ${{ runner.os }}-${{ secrets.CACHE_VERSION }}-nextjs-
 
-      - name: Build
+      - name: Build (for testing only)
         run: PRESERVE_NEXT_CACHE=true npm run build
 
       - name: Save NextJS build

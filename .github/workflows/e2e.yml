@@ -129,10 +129,7 @@ jobs:
         id: check-matching-branch
         uses: octokit/request-action@v2.x
         with:
-          route: GET /repos/{owner}/{repo}/git/ref/{ref}
-          owner: opencollective
-          repo: opencollective-api
-          ref: heads/${{ env.MATCHING_BRANCH_REF }}
+          route: GET /repos/opencollective/opencollective-api/git/ref/heads/${{ env.MATCHING_BRANCH_REF }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true

@@ -14,6 +14,7 @@ const nextConfig = {
   useFileSystemPublicRoutes: true,
   productionBrowserSourceMaps: true,
   reactStrictMode: true,
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },

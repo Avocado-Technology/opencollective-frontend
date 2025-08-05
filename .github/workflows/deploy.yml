@@ -1,0 +1,177 @@
+name: Deploy OpenCollective Frontend
+
+on:
+  workflow_run:
+    workflows: ['Build and Push to GHCR']
+    types: [completed]
+    branches: [main, develop]
+  repository_dispatch:
+    types: [release-completed]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: opencollective/opencollective-frontend
+
+jobs:
+  deploy-dev:
+    name: Deploy to Development
+    if: (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'develop') || github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          echo "image_tag=develop" >> $GITHUB_OUTPUT
+          echo "environment=development" >> $GITHUB_OUTPUT
+          echo "health_url=https://dev.avcd.tech/frontend/api/health" >> $GITHUB_OUTPUT
+
+      - name: Copy deployment files to Dev Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USERNAME }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          source: 'docker-compose.dev.yml,scripts/deploy-health-check.sh'
+          target: '/opt/opencollective-frontend/'
+          strip_components: 0
+
+      - name: Deploy to Development Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DEV_HOST }}
+          username: ${{ secrets.DEV_USERNAME }}
+          key: ${{ secrets.DEV_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/opencollective-frontend
+
+            echo "🚀 Starting Development deployment..."
+            echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}"
+            echo "🌍 Environment: ${{ steps.vars.outputs.environment }}"
+
+            # Make deploy script executable
+            chmod +x scripts/deploy-health-check.sh
+
+            # Set deployment environment variables
+            export IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
+            export REGISTRY="${{ env.REGISTRY }}"
+            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            export NODE_ENV="${{ steps.vars.outputs.environment }}"
+            export API_URL="https://api-staging.opencollective.com"
+            export INTERNAL_API_URL="https://api-staging-direct.opencollective.com"
+            export IMAGES_URL="https://images-staging.opencollective.com"
+            export PDF_SERVICE_V2_URL="https://pdf-staging.opencollective.com"
+            export ML_SERVICE_URL="https://ml.opencollective.com"
+            export API_KEY="09u624Pc9F47zoGLlkg1TBSbOl2ydSAq"
+
+            # Create external network if needed
+            docker network create microservices-network 2>/dev/null || true
+
+            # Login to GHCR with proper credentials
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest image with retry logic
+            echo "📥 Pulling latest image..."
+            for i in {1..3}; do
+              if docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}; then
+                break
+              fi
+              echo "Pull attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            # Deploy with health checks
+            ./scripts/deploy-health-check.sh docker-compose.dev.yml "${{ steps.vars.outputs.health_url }}" "opencollective-frontend-dev"
+
+            echo "✅ Development deployment completed successfully!"
+            echo "🌐 App: https://dev.avcd.tech/frontend"
+            echo "🏥 Health: ${{ steps.vars.outputs.health_url }}"
+
+  deploy-staging:
+    name: Deploy to Staging
+    if: github.event_name == 'repository_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set deployment variables
+        id: vars
+        run: |
+          # Determine which image tag to use for staging deployment
+          if [[ "${{ github.event_name }}" == "repository_dispatch" ]]; then
+            # Use latest for semantic release triggers (most stable)
+            echo "image_tag=latest" >> $GITHUB_OUTPUT
+          else
+            # Use main for direct pushes to main branch
+            echo "image_tag=main" >> $GITHUB_OUTPUT
+          fi
+          echo "environment=production" >> $GITHUB_OUTPUT
+          echo "health_url=https://staging.avcd.tech/frontend/api/health" >> $GITHUB_OUTPUT
+
+      - name: Copy deployment files to Staging Server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          source: 'docker-compose.staging.yml,scripts/deploy-health-check.sh'
+          target: '/opt/opencollective-frontend/'
+          strip_components: 0
+
+      - name: Deploy to Staging Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USERNAME }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/opencollective-frontend
+
+            echo "🚀 Starting Staging deployment..."
+            echo "📦 Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}"
+            echo "🌍 Environment: ${{ steps.vars.outputs.environment }}"
+
+            # Make deploy script executable
+            chmod +x scripts/deploy-health-check.sh
+
+            # Set deployment environment variables
+            export IMAGE_TAG="${{ steps.vars.outputs.image_tag }}"
+            export REGISTRY="${{ env.REGISTRY }}"
+            export IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            export NODE_ENV="${{ steps.vars.outputs.environment }}"
+            export API_URL="https://api-staging.opencollective.com"
+            export INTERNAL_API_URL="https://api-staging-direct.opencollective.com"
+            export IMAGES_URL="https://images-staging.opencollective.com"
+            export PDF_SERVICE_V2_URL="https://pdf-staging.opencollective.com"
+            export ML_SERVICE_URL="https://ml.opencollective.com"
+            export API_KEY="09u624Pc9F47zoGLlkg1TBSbOl2ydSAq"
+
+            # Create external network if needed
+            docker network create microservices-network 2>/dev/null || true
+
+            # Login to GHCR with proper credentials
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest image with retry logic
+            echo "📥 Pulling latest image..."
+            for i in {1..3}; do
+              if docker pull ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}; then
+                break
+              fi
+              echo "Pull attempt $i failed, retrying..."
+              sleep 5
+            done
+
+            # Deploy with health checks
+            ./scripts/deploy-health-check.sh docker-compose.staging.yml "${{ steps.vars.outputs.health_url }}" "opencollective-frontend-staging"
+
+            echo "✅ Staging deployment completed successfully!"
+            echo "🌐 App: https://staging.avcd.tech/frontend"
+            echo "🏥 Health: ${{ steps.vars.outputs.health_url }}"

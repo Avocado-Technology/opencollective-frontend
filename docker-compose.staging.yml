@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  opencollective-frontend:
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-opencollective/opencollective-frontend}:${IMAGE_TAG:-main}
+    container_name: opencollective-frontend-staging
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - API_URL=${API_URL:-https://api-staging.opencollective.com}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-https://api-staging-direct.opencollective.com}
+      - IMAGES_URL=${IMAGES_URL:-https://images-staging.opencollective.com}
+      - PDF_SERVICE_V2_URL=${PDF_SERVICE_V2_URL:-https://pdf-staging.opencollective.com}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-https://ml.opencollective.com}
+      - API_KEY=${API_KEY:-09u624Pc9F47zoGLlkg1TBSbOl2ydSAq}
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.opencollective-frontend-staging.rule=Host(`staging.avcd.tech`) && PathPrefix(`/frontend`)"
+      - "traefik.http.routers.opencollective-frontend-staging.entrypoints=websecure"
+      - "traefik.http.routers.opencollective-frontend-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opencollective-frontend-staging.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.opencollective-frontend-staging-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.opencollective-frontend-staging-headers.headers.customrequestheaders.X-Forwarded-Host=staging.avcd.tech"
+      - "traefik.http.middlewares.opencollective-frontend-staging-stripprefix.stripprefix.prefixes=/frontend"
+      - "traefik.http.routers.opencollective-frontend-staging.middlewares=opencollective-frontend-staging-headers,opencollective-frontend-staging-stripprefix"
+      # Static assets router (for /_next/static paths)
+      - "traefik.http.routers.opencollective-frontend-static-staging.rule=Host(`staging.avcd.tech`) && PathPrefix(`/_next/static`)"
+      - "traefik.http.routers.opencollective-frontend-static-staging.entrypoints=websecure"
+      - "traefik.http.routers.opencollective-frontend-static-staging.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.opencollective-frontend-static-staging.middlewares=opencollective-frontend-staging-headers"
+      # HTTP router with redirect to HTTPS
+      - "traefik.http.routers.opencollective-frontend-staging-http.rule=Host(`staging.avcd.tech`) && PathPrefix(`/frontend`)"
+      - "traefik.http.routers.opencollective-frontend-staging-http.entrypoints=web"
+      - "traefik.http.routers.opencollective-frontend-staging-http.middlewares=https-redirect"
+      # Static assets HTTP redirect
+      - "traefik.http.routers.opencollective-frontend-static-staging-http.rule=Host(`staging.avcd.tech`) && PathPrefix(`/_next/static`)"
+      - "traefik.http.routers.opencollective-frontend-static-staging-http.entrypoints=web"
+      - "traefik.http.routers.opencollective-frontend-static-staging-http.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+
+networks:
+  microservices-network:
+    external: true

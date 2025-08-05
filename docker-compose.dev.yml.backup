@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  opencollective-frontend:
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_NAME:-opencollective/opencollective-frontend}:${IMAGE_TAG:-develop}
+    container_name: opencollective-frontend-dev
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=development
+      - API_URL=${API_URL:-https://api-staging.opencollective.com}
+      - INTERNAL_API_URL=${INTERNAL_API_URL:-https://api-staging-direct.opencollective.com}
+      - IMAGES_URL=${IMAGES_URL:-https://images-staging.opencollective.com}
+      - PDF_SERVICE_V2_URL=${PDF_SERVICE_V2_URL:-https://pdf-staging.opencollective.com}
+      - ML_SERVICE_URL=${ML_SERVICE_URL:-https://ml.opencollective.com}
+      - API_KEY=${API_KEY:-09u624Pc9F47zoGLlkg1TBSbOl2ydSAq}
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "sh", "-c", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 120s
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.opencollective-frontend-dev.rule=Host(`dev.avcd.tech`) && PathPrefix(`/frontend`)"
+      - "traefik.http.routers.opencollective-frontend-dev.entrypoints=websecure"
+      - "traefik.http.routers.opencollective-frontend-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.opencollective-frontend-dev.loadbalancer.server.port=3000"
+      - "traefik.http.middlewares.opencollective-frontend-dev-headers.headers.customrequestheaders.X-Forwarded-Proto=https"
+      - "traefik.http.middlewares.opencollective-frontend-dev-headers.headers.customrequestheaders.X-Forwarded-Host=dev.avcd.tech"
+      - "traefik.http.middlewares.opencollective-frontend-dev-stripprefix.stripprefix.prefixes=/frontend"
+      - "traefik.http.routers.opencollective-frontend-dev.middlewares=opencollective-frontend-dev-headers,opencollective-frontend-dev-stripprefix"
+      # Static assets router (for /_next/static paths)
+      - "traefik.http.routers.opencollective-frontend-static-dev.rule=Host(`dev.avcd.tech`) && PathPrefix(`/_next/static`)"
+      - "traefik.http.routers.opencollective-frontend-static-dev.entrypoints=websecure"
+      - "traefik.http.routers.opencollective-frontend-static-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.opencollective-frontend-static-dev.middlewares=opencollective-frontend-dev-headers"
+      # HTTP router with redirect to HTTPS
+      - "traefik.http.routers.opencollective-frontend-dev-http.rule=Host(`dev.avcd.tech`) && PathPrefix(`/frontend`)"
+      - "traefik.http.routers.opencollective-frontend-dev-http.entrypoints=web"
+      - "traefik.http.routers.opencollective-frontend-dev-http.middlewares=https-redirect"
+      # Static assets HTTP redirect
+      - "traefik.http.routers.opencollective-frontend-static-dev-http.rule=Host(`dev.avcd.tech`) && PathPrefix(`/_next/static`)"
+      - "traefik.http.routers.opencollective-frontend-static-dev-http.entrypoints=web"
+      - "traefik.http.routers.opencollective-frontend-static-dev-http.middlewares=https-redirect"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.https-redirect.redirectscheme.permanent=true"
+
+  # Optional services for dev environment
+  mailpit:
+    image: axllent/mailpit
+    container_name: opencollective-mailpit-dev
+    restart: unless-stopped
+    networks:
+      - microservices-network
+    environment:
+      MP_MAX_MESSAGES: 5000
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:8025/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mailpit-dev.rule=Host(`dev.avcd.tech`) && PathPrefix(`/mailpit`)"
+      - "traefik.http.routers.mailpit-dev.entrypoints=websecure"
+      - "traefik.http.routers.mailpit-dev.tls.certresolver=letsencrypt"
+      - "traefik.http.services.mailpit-dev.loadbalancer.server.port=8025"
+      - "traefik.http.middlewares.mailpit-dev-stripprefix.stripprefix.prefixes=/mailpit"
+      - "traefik.http.routers.mailpit-dev.middlewares=mailpit-dev-stripprefix"
+
+networks:
+  microservices-network:
+    external: true

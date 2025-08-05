@@ -5,10 +5,16 @@
 !pages
 !scripts
 !server
-!static
+!public
 !.babelrc
 !env.js
 !next.config.js
+!rewrites.js
+!tsconfig.json
+!next-env.d.ts
+!middleware.ts
+!*.config.js
+!*.config.mjs
 !package.json
 !package-lock.json
 **/__tests__/*
