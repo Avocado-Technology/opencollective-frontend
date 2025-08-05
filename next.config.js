@@ -42,6 +42,13 @@ const nextConfig = {
     config.resolve.alias['@sentry/replay'] = false;
     config.resolve.alias['canvas'] = false; // https://github.com/wojtekmaj/react-pdf?tab=readme-ov-file#nextjs
 
+    // Handle specific CSS imports from react-pdf to prevent build errors
+    config.module.rules.unshift({
+      test: /\.(TextLayer|AnnotationLayer)\.css$/,
+      include: /node_modules[/\\]react-pdf/,
+      use: 'raw-loader',
+    });
+
     config.plugins.push(
       // Ignore __tests__
       new webpack.IgnorePlugin({ resourceRegExp: /[\\/]__tests__[\\/]/ }),
