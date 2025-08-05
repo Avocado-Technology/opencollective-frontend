@@ -1,3 +1,5 @@
+<!--  -->
+
 # Deployment
 
 To deploy to staging or production, you need to be a core member of the Open Collective team.
@@ -48,7 +50,7 @@ URL: https://opencollective.com/
 
 ## Rollback Deployment to Previous State
 
-If something goes wrong, you can easily rollback the deployment with the following commands. 
+If something goes wrong, you can easily rollback the deployment with the following commands.
 
 ```bash
 heroku releases --app oc-prod-frontend
